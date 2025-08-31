@@ -112,7 +112,7 @@ git >= 2.30.0
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/your-username/stockflow-inventory-system.git
+   git clone https://github.com/nicolaschicaiza/stockflow-inventory-system.git
    cd stockflow-inventory-system
    ```
 
@@ -301,15 +301,20 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 ## 📞 Contact & Links
 
-**Developer**: [Your Name]  
+**Developer**: [Nicolas Chicaiza]  
 **Portfolio**: [Link to your main portfolio]  
-**LinkedIn**: [Your LinkedIn profile]  
-**Email**: [Your email]
+**LinkedIn**: [jnicolashc](https://www.linkedin.com/in/nicolas-chicaiza/)  
+**Email**: [jefryn@unicauca.edu.co](jefryn@unicauca.edu.co)
 
 ### Project Links
-- **Repository**: [GitHub - StockFlow](https://github.com/your-username/stockflow-inventory-system)
-- **Issues**: [Bug reports and feature requests](https://github.com/your-username/stockflow-inventory-system/issues)
-- **Portfolio**: [Main developer portfolio](https://github.com/your-username/developer-portfolio)
+- **Repository**: [GitHub - StockFlow](https://github.com/nicolaschicaiza/stockflow-inventory-system)
+- **Issues**: [Bug reports and feature requests](https://github.com/nicolaschicaiza/stockflow-inventory-system/issues)
+- **Portfolio**: [Main developer portfolio](https://github.com/nicolaschicaiza/developer-portfolio)
+
+### 🔗 Related Documentation
+- **[📊 Portfolio Overview](../../docs/PORTFOLIO_OVERVIEW.md)** - Complete portfolio progress and all projects
+- **[📋 Master Plan](../../docs/PLAN_MAESTRO.md)** - 16-week development roadmap
+- **[📈 Weekly Reports](../../docs/weekly-reports/)** - Development progress tracking
 
 ---
 
