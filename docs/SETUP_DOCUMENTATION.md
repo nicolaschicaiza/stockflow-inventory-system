@@ -102,7 +102,7 @@ stockflow/
 
 | Tecnología | Versión | Justificación |
 |------------|---------|---------------|
-| **Node.js** | v18+ | Runtime maduro, gran ecosistema, excelente performance |
+| **Node.js** | v20+ | Runtime maduro, requerido por Vite 7+, excelente performance |
 | **TypeScript** | ^5.9.2 | Type safety, mejor DX, reduce bugs en producción |
 | **Express.js** | ^4.18.0 | Framework web estable y probado en producción |
 | **PostgreSQL** | 15+ | ACID compliance, JSON support, escalabilidad |
@@ -183,7 +183,49 @@ git remote add origin git@github.com:usuario/developer-portfolio.git
 git submodule add git@github.com:usuario/stockflow-inventory-system.git web-development/stockflow
 ```
 
-### 2. **Configuración del Backend**
+### 2. **Configuración Docker (Actualizada)**
+
+#### ⚠️ IMPORTANTE: Configuración con Docker
+A partir del 7 de septiembre, 2025, el proyecto ahora utiliza **Docker** para evitar problemas de versiones y compartir dependencias eficientemente.
+
+#### Archivos Docker Añadidos
+```
+stockflow/
+├── docker-compose.yml           # Configuración base
+├── docker-compose.dev.yml       # Overrides de desarrollo
+├── .env                         # Variables de entorno
+├── Makefile                     # Comandos simplificados
+├── backend/Dockerfile.dev       # Contenedor backend
+└── frontend/Dockerfile.dev      # Contenedor frontend
+```
+
+#### Comandos Principales
+```bash
+# Iniciar todo el stack
+make dev
+
+# Ver logs
+make logs-frontend
+make logs-backend
+
+# Reconstruir servicios
+make build frontend
+make build backend
+
+# Limpiar todo
+make clean
+```
+
+#### Stack de Servicios
+- **PostgreSQL** (puerto 5432): Base de datos principal
+- **Backend** (puerto 5000): API Node.js + TypeScript  
+- **Frontend** (puerto 3000): React + Vite + TypeScript
+- **Adminer** (puerto 8080): Administración de BD
+- **MailHog** (puerto 8025): Testing de emails
+
+#### Configuración Manual (Deprecado)
+
+> ⚠️ **NOTA**: La configuración manual siguiente se mantiene como referencia, pero se recomienda usar Docker.
 
 #### Inicialización
 ```bash

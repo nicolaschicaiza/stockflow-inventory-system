@@ -1,0 +1,787 @@
+Project StockFlow {
+  database_type: 'PostgreSQL'
+  Note: '''
+    # StockFlow Database Schema
+    Sistema de gestión de inventario con facturación integrada
+    Diseñado para pequeñas y medianas empresas
+    
+    ## Funcionalidades principales:
+    - Gestión de usuarios con roles (admin, cajero, contador)
+    - Control de productos con códigos de barras
+    - Gestión de proveedores y clientes
+    - Control de inventario con alertas de stock bajo
+    - Sistema de ventas y facturación
+    - Reportes y métricas de negocio
+  '''
+}
+
+// ================================
+// TABLA DE USUARIOS Y ROLES
+// ================================
+
+Table users {
+  id uuid [primary key, default: `gen_random_uuid()`, note: 'ID único del usuario']
+  email varchar(255) [unique, not null, note: 'Email de autenticación']
+  password_hash varchar(255) [not null, note: 'Hash de contraseña con bcrypt + salt']
+  password_salt varchar(255) [not null, note: 'Salt único para cada contraseña']
+  password_reset_token varchar(255) [note: 'Token para reseteo de contraseña']
+  password_reset_expires timestamp [note: 'Expiración del token de reseteo']
+  failed_login_attempts integer [default: 0, note: 'Intentos fallidos de login']
+  account_locked_until timestamp [note: 'Cuenta bloqueada hasta esta fecha']
+  first_name varchar(100) [not null, note: 'Nombre del usuario']
+  last_name varchar(100) [not null, note: 'Apellido del usuario']
+  phone varchar(20) [note: 'Teléfono de contacto']
+  role user_role [not null, default: 'cajero', note: 'Rol del usuario en el sistema']
+  is_active boolean [default: true, note: 'Estado activo/inactivo']
+  last_login_at timestamp [note: 'Último inicio de sesión']
+  created_at timestamp [default: `now()`, note: 'Fecha de creación']
+  updated_at timestamp [default: `now()`, note: 'Última actualización']
+
+  Note: 'Usuarios del sistema con diferentes roles y permisos'
+}
+
+Enum user_role {
+  SUPER_ADMIN [note: 'Superadministrador con todos los permisos']
+  ADMIN [note: 'Administrador con acceso completo']
+  MANAGER [note: 'Gerente con permisos de reporte y gestión']
+  INVENTORY_CLERK [note: 'Encargado de inventario']
+  CASHIER [note: 'Cajero para ventas y consultas']
+  ACCOUNTANT [note: 'Contador para reportes financieros']
+}
+
+// ================================
+// CATEGORÍAS DE PRODUCTOS
+// ================================
+
+Table categories {
+  id uuid [primary key, default: `gen_random_uuid()`]
+  name varchar(100) [not null, unique]
+  description text
+  parent_id uuid [ref: > categories.id, note: 'Categoría padre para estructura jerárquica']
+  is_active boolean [default: true]
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [default: `now()`]
+
+  Note: 'Categorías jerárquicas de productos'
+}
+
+// ================================
+// PROVEEDORES
+// ================================
+
+Table suppliers {
+  id uuid [primary key, default: `gen_random_uuid()`]
+  business_name varchar(200) [not null, note: 'Razón social']
+  contact_name varchar(100) [note: 'Nombre de contacto']
+  tax_id varchar(50) [unique, note: 'NIT o documento fiscal']
+  email varchar(255)
+  phone varchar(20)
+  mobile varchar(20)
+  address text
+  city varchar(100)
+  state varchar(100)
+  postal_code varchar(20)
+  country varchar(100) [default: 'Colombia']
+  payment_terms integer [default: 30, note: 'Días de plazo de pago']
+  credit_limit decimal(15,2) [default: 0, note: 'Límite de crédito']
+  is_active boolean [default: true]
+  notes text
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [default: `now()`]
+
+  Note: 'Proveedores de productos'
+}
+
+// ================================
+// PRODUCTOS
+// ================================
+
+Table products {
+  id uuid [primary key, default: `gen_random_uuid()`]
+  sku varchar(100) [unique, not null, note: 'Código interno del producto']
+  barcode varchar(100) [unique, note: 'Código de barras']
+  name varchar(200) [not null, note: 'Nombre del producto']
+  description text
+  category_id uuid [ref: > categories.id, not null]
+  supplier_id uuid [ref: > suppliers.id, note: 'Proveedor principal']
+  unit_type product_unit [not null, default: 'unidad', note: 'Unidad de medida']
+  cost_price decimal(15,2) [not null, default: 0, note: 'Precio de costo']
+  sale_price decimal(15,2) [not null, default: 0, note: 'Precio de venta']
+  tax_rate decimal(5,2) [default: 19, note: 'Tasa de impuesto (IVA)']
+  min_stock integer [default: 0, note: 'Stock mínimo para alerta']
+  max_stock integer [note: 'Stock máximo recomendado']
+  location varchar(100) [note: 'Ubicación en almacén']
+  expiration_days integer [note: 'Días hasta vencimiento (productos perecederos)']
+  is_active boolean [default: true]
+  image_url varchar(500) [note: 'URL de imagen del producto']
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [default: `now()`]
+
+  indexes {
+    (sku) [unique]
+    (barcode) [unique]
+    (category_id)
+    (supplier_id)
+    (name) [type: btree]
+  }
+
+  Note: 'Productos del inventario con información completa'
+}
+
+Enum product_unit {
+  unidad
+  kilogramo
+  gramo
+  litro
+  mililitro
+  metro
+  centimetro
+  paquete
+  caja
+  docena
+}
+
+// ================================
+// CLIENTES
+// ================================
+
+Table customers {
+  id uuid [primary key, default: `gen_random_uuid()`]
+  customer_type customer_type [not null, default: 'particular']
+  business_name varchar(200) [note: 'Razón social (para empresas)']
+  first_name varchar(100) [note: 'Nombre (para particulares)']
+  last_name varchar(100) [note: 'Apellido (para particulares)']
+  document_type document_type [not null, default: 'cedula']
+  document_number varchar(50) [unique, not null]
+  email varchar(255)
+  phone varchar(20)
+  mobile varchar(20)
+  address text
+  city varchar(100)
+  state varchar(100)
+  postal_code varchar(20)
+  country varchar(100) [default: 'Colombia']
+  credit_limit decimal(15,2) [default: 0]
+  payment_terms integer [default: 0, note: 'Días de crédito']
+  is_active boolean [default: true]
+  notes text
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [default: `now()`]
+
+  indexes {
+    (document_number) [unique]
+    (email)
+    (customer_type)
+  }
+
+  Note: 'Clientes del negocio (particulares y empresas)'
+}
+
+Enum customer_type {
+  particular [note: 'Cliente particular/consumidor final']
+  empresa [note: 'Cliente empresarial']
+}
+
+Enum document_type {
+  cedula [note: 'Cédula de ciudadanía']
+  nit [note: 'NIT empresarial']
+  pasaporte [note: 'Pasaporte']
+  cedula_extranjeria [note: 'Cédula de extranjería']
+}
+
+// ================================
+// MOVIMIENTOS DE INVENTARIO
+// ================================
+
+Table inventory_movements {
+  id uuid [primary key, default: `gen_random_uuid()`]
+  product_id uuid [ref: > products.id, not null]
+  movement_type movement_type [not null]
+  quantity integer [not null, note: 'Cantidad (positiva para entrada, negativa para salida)']
+  unit_cost decimal(15,2) [note: 'Costo unitario al momento del movimiento']
+  total_cost decimal(15,2) [note: 'Costo total del movimiento']
+  reference_type reference_type [note: 'Tipo de documento que genera el movimiento']
+  reference_id uuid [note: 'ID del documento de referencia']
+  supplier_id uuid [ref: > suppliers.id, note: 'Proveedor (para entradas)']
+  user_id uuid [ref: > users.id, not null, note: 'Usuario que registra el movimiento']
+  notes text
+  created_at timestamp [default: `now()`]
+
+  indexes {
+    (product_id)
+    (movement_type)
+    (reference_type, reference_id)
+    (created_at)
+  }
+
+  Note: 'Registro de todos los movimientos de inventario'
+}
+
+Enum movement_type {
+  entrada [note: 'Ingreso de mercancía']
+  salida [note: 'Salida de mercancía']
+  ajuste_positivo [note: 'Ajuste de inventario (suma)']
+  ajuste_negativo [note: 'Ajuste de inventario (resta)']
+  devolucion [note: 'Devolución de cliente']
+  merma [note: 'Pérdida/deterioro']
+}
+
+Enum reference_type {
+  compra [note: 'Orden de compra']
+  venta [note: 'Venta/factura']
+  ajuste [note: 'Ajuste manual']
+  devolucion [note: 'Devolución']
+  inicial [note: 'Inventario inicial']
+}
+
+// ================================
+// STOCK ACTUAL
+// ================================
+
+Table current_stock {
+  id uuid [primary key, default: `gen_random_uuid()`]
+  product_id uuid [ref: - products.id, unique, not null, note: 'Relación 1:1 con producto']
+  current_quantity integer [not null, default: 0, note: 'Cantidad actual en stock']
+  reserved_quantity integer [not null, default: 0, note: 'Cantidad reservada (pedidos pendientes)']
+  available_quantity integer [not null, default: 0, note: 'Cantidad disponible (actual - reservada)']
+  average_cost decimal(15,2) [not null, default: 0, note: 'Costo promedio ponderado']
+  last_movement_at timestamp [note: 'Fecha del último movimiento']
+  updated_at timestamp [default: `now()`]
+
+  Note: 'Stock actual por producto (tabla de resumen para performance)'
+}
+
+// ================================
+// VENTAS Y FACTURACIÓN
+// ================================
+
+Table sales {
+  id uuid [primary key, default: `gen_random_uuid()`]
+  sale_number varchar(50) [unique, not null, note: 'Número de factura/venta']
+  customer_id uuid [ref: > customers.id, not null]
+  user_id uuid [ref: > users.id, not null, note: 'Usuario que registra la venta']
+  sale_date timestamp [not null, default: `now()`]
+  due_date timestamp [note: 'Fecha de vencimiento (para ventas a crédito)']
+  status sale_status [not null, default: 'pendiente']
+  payment_method payment_method [not null, default: 'efectivo']
+  
+  // Totales de la venta
+  subtotal decimal(15,2) [not null, default: 0, note: 'Subtotal sin impuestos']
+  tax_amount decimal(15,2) [not null, default: 0, note: 'Total de impuestos']
+  discount_amount decimal(15,2) [not null, default: 0, note: 'Total de descuentos']
+  total_amount decimal(15,2) [not null, default: 0, note: 'Total final']
+  
+  // Información fiscal
+  tax_id varchar(50) [note: 'Número fiscal/DIAN']
+  resolution varchar(100) [note: 'Resolución DIAN']
+  
+  notes text
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [default: `now()`]
+
+  indexes {
+    (sale_number) [unique]
+    (customer_id)
+    (user_id)
+    (sale_date)
+    (status)
+  }
+
+  Note: 'Ventas/facturas del sistema'
+}
+
+Enum sale_status {
+  pendiente [note: 'Venta pendiente de pago']
+  pagada [note: 'Venta pagada completamente']
+  parcial [note: 'Pago parcial recibido']
+  vencida [note: 'Venta vencida']
+  anulada [note: 'Venta anulada']
+}
+
+Enum payment_method {
+  efectivo [note: 'Pago en efectivo']
+  tarjeta_credito [note: 'Tarjeta de crédito']
+  tarjeta_debito [note: 'Tarjeta débito']
+  transferencia [note: 'Transferencia bancaria']
+  credito [note: 'Venta a crédito']
+  cheque [note: 'Pago con cheque']
+}
+
+// ================================
+// ITEMS DE VENTA
+// ================================
+
+Table sale_items {
+  id uuid [primary key, default: `gen_random_uuid()`]
+  sale_id uuid [ref: > sales.id, not null, note: 'Venta a la que pertenece']
+  product_id uuid [ref: > products.id, not null]
+  quantity integer [not null, note: 'Cantidad vendida']
+  unit_price decimal(15,2) [not null, note: 'Precio unitario al momento de la venta']
+  discount_percentage decimal(5,2) [default: 0, note: 'Porcentaje de descuento aplicado']
+  discount_amount decimal(15,2) [default: 0, note: 'Monto de descuento']
+  tax_rate decimal(5,2) [not null, default: 19, note: 'Tasa de impuesto aplicada']
+  tax_amount decimal(15,2) [not null, default: 0, note: 'Monto de impuesto']
+  line_total decimal(15,2) [not null, note: 'Total de la línea (precio * cantidad - descuento + impuesto)']
+  
+  created_at timestamp [default: `now()`]
+
+  indexes {
+    (sale_id)
+    (product_id)
+  }
+
+  Note: 'Items/líneas de cada venta'
+}
+
+// ================================
+// PAGOS RECIBIDOS
+// ================================
+
+Table payments {
+  id uuid [primary key, default: `gen_random_uuid()`]
+  sale_id uuid [ref: > sales.id, not null]
+  payment_date timestamp [not null, default: `now()`]
+  amount decimal(15,2) [not null, note: 'Monto del pago']
+  payment_method payment_method [not null]
+  reference varchar(100) [note: 'Referencia del pago (número de transacción, cheque, etc.)']
+  notes text
+  user_id uuid [ref: > users.id, not null, note: 'Usuario que registra el pago']
+  created_at timestamp [default: `now()`]
+
+  indexes {
+    (sale_id)
+    (payment_date)
+    (payment_method)
+  }
+
+  Note: 'Registro de pagos recibidos por ventas'
+}
+
+// ================================
+// COMPRAS A PROVEEDORES
+// ================================
+
+Table purchases {
+  id uuid [primary key, default: `gen_random_uuid()`]
+  purchase_number varchar(50) [unique, not null, note: 'Número de orden de compra']
+  supplier_id uuid [ref: > suppliers.id, not null]
+  user_id uuid [ref: > users.id, not null, note: 'Usuario que registra la compra']
+  purchase_date timestamp [not null, default: `now()`]
+  expected_date timestamp [note: 'Fecha esperada de entrega']
+  received_date timestamp [note: 'Fecha de recepción']
+  status purchase_status [not null, default: 'pendiente']
+  
+  // Totales de la compra
+  subtotal decimal(15,2) [not null, default: 0]
+  tax_amount decimal(15,2) [not null, default: 0]
+  total_amount decimal(15,2) [not null, default: 0]
+  
+  notes text
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [default: `now()`]
+
+  indexes {
+    (purchase_number) [unique]
+    (supplier_id)
+    (purchase_date)
+    (status)
+  }
+
+  Note: 'Órdenes de compra a proveedores'
+}
+
+Enum purchase_status {
+  pendiente [note: 'Compra ordenada, pendiente de recibir']
+  recibida [note: 'Mercancía recibida']
+  parcial [note: 'Recibida parcialmente']
+  cancelada [note: 'Compra cancelada']
+}
+
+Table purchase_items {
+  id uuid [primary key, default: `gen_random_uuid()`]
+  purchase_id uuid [ref: > purchases.id, not null]
+  product_id uuid [ref: > products.id, not null]
+  quantity_ordered integer [not null, note: 'Cantidad ordenada']
+  quantity_received integer [default: 0, note: 'Cantidad recibida']
+  unit_cost decimal(15,2) [not null, note: 'Costo unitario']
+  tax_rate decimal(5,2) [default: 19]
+  tax_amount decimal(15,2) [default: 0]
+  line_total decimal(15,2) [not null]
+  
+  created_at timestamp [default: `now()`]
+
+  indexes {
+    (purchase_id)
+    (product_id)
+  }
+
+  Note: 'Items de cada orden de compra'
+}
+
+// ================================
+// SISTEMA DE CONTROL DE APLICACIÓN
+// ================================
+
+// ================================
+// MÓDULOS Y FUNCIONALIDADES
+// ================================
+
+Table app_modules {
+  id uuid [primary key, default: `gen_random_uuid()`]
+  name varchar(100) [not null, unique, note: 'Nombre del módulo (ej: inventory, sales)']
+  display_name varchar(100) [not null, note: 'Nombre para mostrar en UI']
+  description text
+  icon varchar(50) [note: 'Icono del módulo (ej: package, shopping-cart)']
+  color varchar(20) [note: 'Color del tema del módulo']
+  parent_id uuid [ref: > app_modules.id, note: 'Módulo padre para jerarquía']
+  sort_order integer [default: 0, note: 'Orden de visualización']
+  is_active boolean [default: true]
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [default: `now()`]
+
+  Note: 'Módulos principales de la aplicación'
+}
+
+// ================================
+// VISTAS/PANTALLAS DE LA APLICACIÓN
+// ================================
+
+Table app_views {
+  id uuid [primary key, default: `gen_random_uuid()`]
+  module_id uuid [ref: > app_modules.id, not null]
+  name varchar(100) [not null, note: 'Nombre único de la vista']
+  display_name varchar(100) [not null, note: 'Título de la vista']
+  description text
+  route_path varchar(200) [not null, unique, note: 'Ruta de la vista (ej: /inventory/products)']
+  component_name varchar(100) [not null, note: 'Nombre del componente React']
+  layout_name varchar(50) [default: 'default', note: 'Layout a usar']
+  view_type view_type [not null, default: 'page']
+  requires_auth boolean [default: true, note: 'Requiere autenticación']
+  parent_view_id uuid [ref: > app_views.id, note: 'Vista padre (para modals, tabs)']
+  meta_data jsonb [note: 'Metadatos adicionales (breadcrumbs, SEO, etc.)']
+  sort_order integer [default: 0]
+  is_active boolean [default: true]
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [default: `now()`]
+
+  indexes {
+    (module_id)
+    (route_path) [unique]
+    (component_name)
+  }
+
+  Note: 'Vistas/pantallas de la aplicación con sus rutas'
+}
+
+Enum view_type {
+  page [note: 'Página completa']
+  modal [note: 'Modal/diálogo']
+  tab [note: 'Tab dentro de una vista']
+  widget [note: 'Widget/componente embebido']
+  report [note: 'Vista de reporte']
+}
+
+// ================================
+// ACCIONES/OPERACIONES EN VISTAS
+// ================================
+
+Table app_actions {
+  id uuid [primary key, default: `gen_random_uuid()`]
+  view_id uuid [ref: > app_views.id, not null]
+  name varchar(100) [not null, note: 'Nombre de la acción (ej: create, edit, delete)']
+  display_name varchar(100) [not null, note: 'Texto del botón/enlace']
+  description text
+  action_type action_type [not null, default: 'button']
+  icon varchar(50) [note: 'Icono de la acción']
+  button_style varchar(20) [default: 'primary', note: 'Estilo del botón (primary, secondary, danger)']
+  confirmation_message text [note: 'Mensaje de confirmación antes de ejecutar']
+  api_endpoint varchar(200) [note: 'Endpoint de API a llamar']
+  http_method http_method [default: 'GET']
+  redirect_to varchar(200) [note: 'Vista a donde redirigir después']
+  sort_order integer [default: 0]
+  is_active boolean [default: true]
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [default: `now()`]
+
+  indexes {
+    (view_id)
+    (name)
+  }
+
+  Note: 'Acciones disponibles en cada vista (botones, enlaces, etc.)'
+}
+
+Enum action_type {
+  button [note: 'Botón de acción']
+  link [note: 'Enlace/navegación']
+  menu_item [note: 'Item de menú contextual']
+  fab [note: 'Floating Action Button']
+  inline [note: 'Acción inline en tabla']
+}
+
+Enum http_method {
+  GET
+  POST
+  PUT
+  DELETE
+  PATCH
+}
+
+// ================================
+// COMPONENTES UI CONFIGURABLES
+// ================================
+
+Table app_components {
+  id uuid [primary key, default: `gen_random_uuid()`]
+  view_id uuid [ref: > app_views.id, not null]
+  name varchar(100) [not null, note: 'Nombre del componente']
+  component_type component_type [not null]
+  position varchar(50) [note: 'Posición en la vista (header, main, sidebar, footer)']
+  grid_area varchar(50) [note: 'Área de CSS Grid']
+  props jsonb [note: 'Props/configuración del componente en JSON']
+  data_source varchar(200) [note: 'Endpoint o query para datos']
+  conditional_render jsonb [note: 'Condiciones para mostrar el componente']
+  sort_order integer [default: 0]
+  is_active boolean [default: true]
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [default: `now()`]
+
+  indexes {
+    (view_id)
+    (component_type)
+    (position)
+  }
+
+  Note: 'Componentes configurables por vista'
+}
+
+Enum component_type {
+  table [note: 'Tabla de datos']
+  form [note: 'Formulario']
+  chart [note: 'Gráfico']
+  card [note: 'Tarjeta informativa']
+  list [note: 'Lista']
+  filter [note: 'Filtros']
+  pagination [note: 'Paginación']
+  breadcrumbs [note: 'Breadcrumbs']
+  search [note: 'Barra de búsqueda']
+  stats [note: 'Estadísticas/métricas']
+  calendar [note: 'Calendario']
+  map [note: 'Mapa']
+}
+
+// ================================
+// CAMPOS DE FORMULARIOS
+// ================================
+
+Table app_form_fields {
+  id uuid [primary key, default: `gen_random_uuid()`]
+  component_id uuid [ref: > app_components.id, not null]
+  name varchar(100) [not null, note: 'Nombre del campo (atributo del modelo)']
+  label varchar(100) [not null, note: 'Etiqueta visible']
+  field_type field_type [not null]
+  validation_rules jsonb [note: 'Reglas de validación en JSON']
+  options jsonb [note: 'Opciones para select, radio, etc.']
+  placeholder varchar(200) [note: 'Placeholder del campo']
+  help_text text [note: 'Texto de ayuda']
+  default_value varchar(200) [note: 'Valor por defecto']
+  is_required boolean [default: false]
+  is_readonly boolean [default: false]
+  conditional_logic jsonb [note: 'Lógica condicional para mostrar/ocultar']
+  sort_order integer [default: 0]
+  is_active boolean [default: true]
+  created_at timestamp [default: `now()`]
+
+  indexes {
+    (component_id)
+    (name)
+    (field_type)
+  }
+
+  Note: 'Campos configurables de formularios'
+}
+
+Enum field_type {
+  text [note: 'Campo de texto']
+  email [note: 'Campo de email']
+  password [note: 'Campo de contraseña']
+  number [note: 'Campo numérico']
+  decimal [note: 'Campo decimal']
+  date [note: 'Selector de fecha']
+  datetime [note: 'Selector de fecha y hora']
+  select [note: 'Lista desplegable']
+  multiselect [note: 'Selección múltiple']
+  radio [note: 'Botones de radio']
+  checkbox [note: 'Casilla de verificación']
+  textarea [note: 'Área de texto']
+  file [note: 'Subida de archivos']
+  hidden [note: 'Campo oculto']
+  custom [note: 'Componente personalizado']
+}
+
+// ================================
+// COLUMNAS DE TABLAS
+// ================================
+
+Table app_table_columns {
+  id uuid [primary key, default: `gen_random_uuid()`]
+  component_id uuid [ref: > app_components.id, not null]
+  name varchar(100) [not null, note: 'Nombre de la columna (campo de la BD)']
+  label varchar(100) [not null, note: 'Etiqueta de la columna']
+  column_type column_type [not null, default: 'text']
+  width varchar(20) [note: 'Ancho de la columna (ej: 150px, 20%)']
+  is_sortable boolean [default: true]
+  is_filterable boolean [default: true]
+  format_pattern varchar(100) [note: 'Patrón de formato (ej: currency, date)']
+  render_as varchar(50) [note: 'Como renderizar (link, badge, image, etc.)']
+  conditional_style jsonb [note: 'Estilos condicionales basados en valor']
+  sort_order integer [default: 0]
+  is_visible boolean [default: true]
+  created_at timestamp [default: `now()`]
+
+  indexes {
+    (component_id)
+    (name)
+  }
+
+  Note: 'Columnas configurables de tablas'
+}
+
+Enum column_type {
+  text
+  number
+  currency
+  date
+  datetime
+  boolean
+  badge
+  link
+  image
+  actions
+  custom
+}
+
+// ================================
+// PERMISOS GRANULARES
+// ================================
+
+Table app_permissions {
+  id uuid [primary key, default: `gen_random_uuid()`]
+  name varchar(100) [not null, unique, note: 'Nombre del permiso (ej: inventory.products.create)']
+  display_name varchar(100) [not null]
+  description text
+  module_id uuid [ref: > app_modules.id]
+  view_id uuid [ref: > app_views.id, note: 'Vista específica (opcional)']
+  action_id uuid [ref: > app_actions.id, note: 'Acción específica (opcional)']
+  permission_type permission_type [not null, default: 'action']
+  is_active boolean [default: true]
+  created_at timestamp [default: `now()`]
+
+  indexes {
+    (name) [unique]
+    (module_id)
+    (view_id)
+    (action_id)
+  }
+
+  Note: 'Permisos granulares del sistema'
+}
+
+Enum permission_type {
+  module [note: 'Acceso a módulo completo']
+  view [note: 'Acceso a vista específica']
+  action [note: 'Permiso para acción específica']
+  data [note: 'Permiso sobre datos específicos']
+}
+
+// ================================
+// PERMISOS POR ROL
+// ================================
+
+Table role_permissions {
+  id uuid [primary key, default: `gen_random_uuid()`]
+  role user_role [not null]
+  permission_id uuid [ref: > app_permissions.id, not null]
+  is_granted boolean [default: true, note: 'true = permitir, false = denegar explícitamente']
+  conditions jsonb [note: 'Condiciones adicionales para el permiso']
+  created_at timestamp [default: `now()`]
+
+  indexes {
+    (role, permission_id) [unique]
+    (permission_id)
+  }
+
+  Note: 'Permisos asignados a cada rol'
+}
+
+// ================================
+// CONFIGURACIÓN DE APLICACIÓN
+// ================================
+
+Table app_settings {
+  id uuid [primary key, default: `gen_random_uuid()`]
+  key varchar(100) [not null, unique, note: 'Clave de configuración']
+  value text [note: 'Valor de configuración']
+  data_type setting_data_type [not null, default: 'string']
+  category varchar(50) [note: 'Categoría de configuración (ui, business, system)']
+  description text
+  is_public boolean [default: false, note: 'Si es visible para el frontend']
+  is_editable boolean [default: true, note: 'Si se puede editar desde UI']
+  validation_pattern varchar(200) [note: 'Patrón de validación']
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [default: `now()`]
+
+  indexes {
+    (key) [unique]
+    (category)
+    (is_public)
+  }
+
+  Note: 'Configuración global de la aplicación'
+}
+
+Enum setting_data_type {
+  string
+  number
+  boolean
+  json
+  date
+  url
+  email
+}
+
+// ================================
+// NAVEGACIÓN Y MENÚS
+// ================================
+
+Table app_navigation {
+  id uuid [primary key, default: `gen_random_uuid()`]
+  name varchar(100) [not null, note: 'Nombre del item de navegación']
+  display_name varchar(100) [not null, note: 'Texto a mostrar']
+  view_id uuid [ref: > app_views.id, note: 'Vista a la que apunta']
+  external_url varchar(500) [note: 'URL externa (si no es una vista interna)']
+  icon varchar(50) [note: 'Icono del item']
+  parent_id uuid [ref: > app_navigation.id, note: 'Item padre para menús anidados']
+  required_permission varchar(100) [note: 'Permiso requerido para ver el item']
+  navigation_type nav_type [not null, default: 'menu']
+  sort_order integer [default: 0]
+  is_active boolean [default: true]
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [default: `now()`]
+
+  indexes {
+    (parent_id)
+    (view_id)
+    (navigation_type)
+  }
+
+  Note: 'Estructura de navegación y menús'
+}
+
+Enum nav_type {
+  menu [note: 'Item de menú principal']
+  sidebar [note: 'Item de sidebar']
+  breadcrumb [note: 'Item de breadcrumb']
+  footer [note: 'Item de footer']
+  quick_access [note: 'Acceso rápido']
+}

@@ -1,0 +1,132 @@
+# 🐳 StockFlow - Docker Compose Configuration
+# Orchestrates PostgreSQL + Backend + Frontend services
+version: '3.8'
+
+# 📦 Named volumes for data persistence and performance
+volumes:
+  # Database data - persists between container restarts
+  postgres_data:
+    driver: local
+  # Backend node_modules - shared volume for faster installs
+  node_modules_backend:
+    driver: local
+  # Frontend node_modules - shared volume for faster installs  
+  node_modules_frontend:
+    driver: local
+
+# 🌐 Custom network for service communication
+networks:
+  stockflow_network:
+    driver: bridge
+
+# 🚀 Services definition
+services:
+  # 🗄️ PostgreSQL Database Service
+  postgres:
+    image: postgres:15-alpine
+    container_name: stockflow_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-stockflow_db}
+      POSTGRES_USER: ${POSTGRES_USER:-stockflow_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-stockflow_password}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --lc-collate=en_US.UTF-8 --lc-ctype=en_US.UTF-8"
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      # Persistent data storage
+      - postgres_data:/var/lib/postgresql/data
+      # Initialize database with our schema
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./database/seeds.sql:/docker-entrypoint-initdb.d/02-seeds.sql:ro
+    networks:
+      - stockflow_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-stockflow_user} -d ${POSTGRES_DB:-stockflow_db}"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # ⚡ Backend API Service (Node.js + TypeScript)
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    container_name: stockflow_backend
+    restart: unless-stopped
+    environment:
+      # Application
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: ${BACKEND_PORT:-5000}
+      
+      # Database connection
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${POSTGRES_DB:-stockflow_db}
+      DB_USER: ${POSTGRES_USER:-stockflow_user}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-stockflow_password}
+      
+      # JWT Configuration
+      JWT_SECRET: ${JWT_SECRET:-your-super-secret-jwt-key-change-in-production}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
+      
+      # CORS
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000}
+    ports:
+      - "${BACKEND_PORT:-5000}:5000"
+    volumes:
+      # Hot reload - bind mount source code
+      - ./backend:/app:cached
+      # Exclude node_modules from bind mount (use named volume instead)
+      - node_modules_backend:/app/node_modules
+      - /app/dist  # Exclude build output
+    networks:
+      - stockflow_network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:5000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # ⚛️ Frontend Service (React + Vite)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    container_name: stockflow_frontend
+    restart: unless-stopped
+    environment:
+      # Development settings
+      NODE_ENV: ${NODE_ENV:-development}
+      CHOKIDAR_USEPOLLING: true  # For hot reload on some systems
+      
+      # API Configuration
+      VITE_API_URL: ${VITE_API_URL:-http://localhost:5000}
+      VITE_API_VERSION: ${VITE_API_VERSION:-v1}
+      
+      # App Configuration
+      VITE_APP_NAME: ${VITE_APP_NAME:-StockFlow}
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    volumes:
+      # Hot reload - bind mount source code
+      - ./frontend:/app:cached
+      # Exclude node_modules from bind mount (use named volume instead)
+      - node_modules_frontend:/app/node_modules
+      - /app/dist  # Exclude build output
+    networks:
+      - stockflow_network
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3000 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s

@@ -32,13 +32,32 @@ npm --version     # >= 9.0.0
 git --version     # >= 2.30.0
 ```
 
-### Initial Setup
+### Initial Setup (Docker - Recomendado)
 
 ```bash
 # 1. Clonar el repositorio con submódulos
 git clone --recursive git@github.com:tu-usuario/developer-portfolio.git
 cd developer-portfolio/web-development/stockflow
 
+# 2. Copiar variables de entorno (ya configuradas)
+# Archivo .env ya incluido con configuración Docker
+
+# 3. Iniciar stack completo con Docker
+make dev
+
+# ✅ Listo! El stack completo estará corriendo:
+# - Frontend: http://localhost:3000
+# - Backend: http://localhost:5000  
+# - PostgreSQL: localhost:5432
+# - Adminer: http://localhost:8080
+# - MailHog: http://localhost:8025
+```
+
+### Setup Manual (Alternativo)
+
+> ⚠️ **NOTA**: Se recomienda usar Docker. Este método se mantiene para referencia.
+
+```bash
 # 2. Install backend dependencies
 cd backend
 npm install

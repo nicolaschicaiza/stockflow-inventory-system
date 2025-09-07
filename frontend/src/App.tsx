@@ -8,9 +8,9 @@ function App() {
       <div className="container mx-auto px-4 py-12">
         <div className="text-center mb-12">
           <h1 className="text-4xl font-bold text-gray-900 mb-4">
-            🏪 StockFlow
+            🏪 StockFlow - Docker Ready!
           </h1>
-          <p className="text-xl text-gray-600">Inventory Management System</p>
+          <p className="text-xl text-gray-600">Inventory Management System - Hot Reload Test</p>
         </div>
 
         <div className="max-w-2xl mx-auto">

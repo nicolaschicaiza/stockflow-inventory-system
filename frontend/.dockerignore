@@ -1,0 +1,59 @@
+# =3 Frontend .dockerignore - Exclude files from Docker build context
+
+# =Á Dependencies  
+node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# =' Build outputs
+dist/
+build/
+*.tsbuildinfo
+
+# >ê Testing
+coverage/
+*.lcov
+.nyc_output/
+
+# =Ý Environment files (will be provided via Docker Compose)
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+
+# = IDE & Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# =Ê Logs
+logs/
+*.log
+
+# =€ Docker files
+Dockerfile*
+.dockerignore
+
+# =Ë Git & Documentation  
+.git/
+.gitignore
+README.md
+docs/
+
+# =à OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# › React/Vite specific
+.eslintcache
+vite.config.js.timestamp-*
